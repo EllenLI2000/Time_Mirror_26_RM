@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { dfUpsertSession } from "@/lib/dfClient";
 
 type Stored = {
   sessionId: string;
@@ -230,6 +231,13 @@ Rules:
     const finalPast = [...pastMsgs, userMsg, assistantMsg];
     setPastMsgs(finalPast);
     persist(finalPast, futureMsgs);
+    await dfUpsertSession(data.sessionId, {
+  chat: {
+    past: finalPast,
+    future: futureMsgs,
+    updatedAt: new Date().toISOString(),
+  },
+});
 
     pastSendingRef.current = false;
   }
@@ -254,6 +262,13 @@ Rules:
     const finalFuture = [...futureMsgs, userMsg, assistantMsg];
     setFutureMsgs(finalFuture);
     persist(pastMsgs, finalFuture);
+    await dfUpsertSession(data.sessionId, {
+  chat: {
+    past: pastMsgs,
+    future: finalFuture,
+    updatedAt: new Date().toISOString(),
+  },
+});
 
     futureSendingRef.current = false;
   }
