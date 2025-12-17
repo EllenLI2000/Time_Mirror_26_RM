@@ -46,7 +46,7 @@ export default function CustomizePage() {
     future.name.trim() &&
     future.shortBio.trim();
 
-  function handleNext() {
+  async function handleNext() {
     const sessionId =
       localStorage.getItem("sessionId") ??
       (() => {
