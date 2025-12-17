@@ -6,21 +6,11 @@ import { useRouter } from "next/navigation";
 type Stored = {
   sessionId: string;
   createdAt: string;
-  pastSelf: { name: string; shortBio: string };
-  futureSelf: { name: string; shortBio: string };
+  pastSelf: { name: string; age?: number | ""; shortBio: string; description?: string };
+  futureSelf: { name: string; age?: number | ""; shortBio: string; description?: string };
 };
 
 type Msg = { role: "user" | "assistant"; content: string; ts: number };
-
-const bubbleBase: React.CSSProperties = {
-  maxWidth: "80%",
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #e2e2e2",
-  whiteSpace: "pre-wrap",
-  lineHeight: 1.35,
-  fontSize: 14,
-};
 
 function loadJson<T>(key: string): T | null {
   try {
@@ -32,19 +22,45 @@ function loadJson<T>(key: string): T | null {
   }
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+const bubbleBase: React.CSSProperties = {
+  maxWidth: "82%",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #e2e2e2",
+  whiteSpace: "pre-wrap",
+  lineHeight: 1.45,
+  fontSize: 14,
+  boxSizing: "border-box",
+};
+
 export default function ChatPage() {
   const router = useRouter();
 
   const [data, setData] = useState<Stored | null>(null);
-  const [active, setActive] = useState<"past" | "future">("past");
 
+  // Each persona keeps its own conversation state
   const [pastMsgs, setPastMsgs] = useState<Msg[]>([]);
   const [futureMsgs, setFutureMsgs] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
 
-  const sendingRef = useRef(false);
+  // Separate inputs (so you can type in either panel)
+  const [pastInput, setPastInput] = useState("");
+  const [futureInput, setFutureInput] = useState("");
 
-  // ---- load profile + restore chat if exists ----
+  // Prevent double-send
+  const pastSendingRef = useRef(false);
+  const futureSendingRef = useRef(false);
+
+  // For auto-scroll
+  const pastEndRef = useRef<HTMLDivElement | null>(null);
+  const futureEndRef = useRef<HTMLDivElement | null>(null);
+
+  // ----------------------------
+  // Load profiles + restore chat
+  // ----------------------------
   useEffect(() => {
     const profile = loadJson<Stored>("temporalSelves");
     if (!profile) return;
@@ -57,44 +73,128 @@ export default function ChatPage() {
       return;
     }
 
-    // init greetings (one per persona)
-    const p0: Msg = {
+    /**
+     * =========================
+     * STUDENT-EDITABLE ZONE (OPENING MESSAGES)
+     * Students can change the initial greeting / first question.
+     * =========================
+     */
+    const pastGreeting: Msg = {
       role: "assistant",
-      content: `Hi — I’m your past self “${profile.pastSelf.name}”. What’s bothering you right now?`,
+      content: `Hi — I’m your past self “${profile.pastSelf.name}”.\nWhat’s on your mind right now?`,
       ts: Date.now(),
     };
-    const f0: Msg = {
+    const futureGreeting: Msg = {
       role: "assistant",
-      content: `Hi — I’m your future self “${profile.futureSelf.name}”. What’s bothering you right now?`,
+      content: `Hi — I’m your future self “${profile.futureSelf.name}”.\nWhat’s on your mind right now?`,
       ts: Date.now(),
     };
-    setPastMsgs([p0]);
-    setFutureMsgs([f0]);
+
+    setPastMsgs([pastGreeting]);
+    setFutureMsgs([futureGreeting]);
   }, []);
 
-  const currentMsgs = active === "past" ? pastMsgs : futureMsgs;
+  // Auto-scroll when new messages appear
+  useEffect(() => {
+    pastEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [pastMsgs.length]);
 
-  const systemPrompt = useMemo(() => {
+  useEffect(() => {
+    futureEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [futureMsgs.length]);
+
+  // ----------------------------
+  // Safeguard prompt layer
+  // ----------------------------
+
+  /**
+   * =========================
+   * STUDENT-EDITABLE ZONE (SAFEGUARD RULES)
+   * This is the "positive guidance" layer.
+   * Students can refine these rules, tone, or add constraints.
+   * =========================
+   */
+  const safeguardRules = `
+Safeguards:
+- Be supportive and constructive. Gently guide the user toward coping, clarity, and small next steps.
+- Validate feelings without amplifying distress. Avoid catastrophizing, shame, or harsh judgments.
+- Do not provide medical, legal, or crisis advice. If the user asks for emergency help, suggest seeking professional/local support.
+- Encourage agency: help the user identify one controllable action, one helpful reframe, or one small experiment.
+- Ask at most ONE reflective follow-up question per turn.
+- Keep responses concise (2–6 sentences). End with a gentle question or invitation.
+`.trim();
+
+  function buildSystemPrompt(persona: "past" | "future") {
     if (!data) return "";
-    const self = active === "past" ? data.pastSelf : data.futureSelf;
+    const self = persona === "past" ? data.pastSelf : data.futureSelf;
 
-    // 关键：shortBio 明确写进去，并且强约束“必须一致”
-    return `
-You are the user's ${active} self.
+    /**
+     * =========================
+     * STUDENT-EDITABLE ZONE (PERSONA PROMPT TEMPLATE)
+     * Students can change the persona framing here, e.g., time distance, tone, goals.
+     * =========================
+     */
+    const personaFrame =
+      persona === "past"
+        ? `
+You are the user's PAST self.
+Your stance: empathetic, honest, grounded in what it felt like back then.
+Goal: help the user feel understood, reduce self-blame, and identify one small next step.
+`
+        : `
+You are the user's FUTURE self.
+Your stance: calm, hopeful, perspective-taking.
+Goal: help the user see possibilities, focus on progress, and identify one small next step.
+`;
 
+    const identity = `
 Identity you must embody:
 - Name: ${self.name}
+- Age: ${self.age ?? "not specified"}
 - Short bio: ${self.shortBio}
+- Description: ${self.description ?? "not specified"}
 
 Rules:
 - Speak in first person as ${self.name}.
-- Stay consistent with the short bio at all times.
-- Be reflective and supportive, not clinical.
-- Ask at most one gentle follow-up question.
-- Keep responses concise (2–6 sentences).
+- Stay consistent with the bio/description.
+- Do not mention "system prompt" or policies.
 `.trim();
-  }, [data, active]);
 
+    return `${personaFrame.trim()}\n\n${identity}\n\n${safeguardRules}`;
+  }
+
+  // ----------------------------
+  // API call helper
+  // ----------------------------
+  async function callLLM(systemPrompt: string, history: Msg[], userText: string) {
+    // keep last N messages to control cost; adjust if needed
+    const N = 12;
+
+    const messages = history
+      .filter((m) => m.content !== "…")
+      .slice(-N)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const res = await fetch("/api/openai-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemPrompt,
+        messages: [...messages, { role: "user", content: userText }],
+      }),
+    });
+
+    const json = await res.json().catch(() => ({} as any));
+    if (!res.ok) {
+      // show real error text in the chat for debugging (prototype-friendly)
+      return `API error (${res.status}): ${json?.error ?? "unknown"}`;
+    }
+    return (json?.content ?? "…").toString().trim() || "…";
+  }
+
+  // ----------------------------
+  // Persist transcript
+  // ----------------------------
   function persist(nextPast: Msg[], nextFuture: Msg[]) {
     if (!data) return;
     localStorage.setItem(
@@ -107,64 +207,61 @@ Rules:
     );
   }
 
-  async function callLLM(persona: "past" | "future", fullHistory: Msg[], userText: string) {
-    // 关键：把该 persona 的历史一起发过去（否则不“定制”）
-    const messages = fullHistory
-      .filter((m) => m.content !== "…")
-      .slice(-12) // 最近 12 条，够用也省 token
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    const res = await fetch("/api/openai-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemPrompt, // 注意：systemPrompt 已经根据 active persona 生成
-        messages: [...messages, { role: "user", content: userText }],
-      }),
-    });
-
-    if (!res.ok) return "Sorry — I’m having trouble responding right now.";
-    const json = await res.json();
-    return (json?.content ?? "…").toString().trim() || "…";
-  }
-
-  async function send() {
-    const text = input.trim();
+  // ----------------------------
+  // Send handlers (Past / Future)
+  // ----------------------------
+  async function sendPast() {
+    const text = pastInput.trim();
     if (!text || !data) return;
-    if (sendingRef.current) return;
-    sendingRef.current = true;
+    if (pastSendingRef.current) return;
+    pastSendingRef.current = true;
+
+    setPastInput("");
 
     const userMsg: Msg = { role: "user", content: text, ts: Date.now() };
     const thinking: Msg = { role: "assistant", content: "…", ts: Date.now() + 1 };
 
-    setInput("");
+    const base = [...pastMsgs, userMsg, thinking];
+    setPastMsgs(base);
 
-    if (active === "past") {
-      const base = [...pastMsgs, userMsg, thinking];
-      setPastMsgs(base);
+    const reply = await callLLM(buildSystemPrompt("past"), [...pastMsgs, userMsg], text);
+    const assistantMsg: Msg = { role: "assistant", content: reply, ts: Date.now() + 2 };
 
-      const reply = await callLLM("past", [...pastMsgs], text);
-      const assistantMsg: Msg = { role: "assistant", content: reply, ts: Date.now() + 2 };
+    const finalPast = [...pastMsgs, userMsg, assistantMsg];
+    setPastMsgs(finalPast);
+    persist(finalPast, futureMsgs);
 
-      const finalPast = [...pastMsgs, userMsg, assistantMsg];
-      setPastMsgs(finalPast);
-      persist(finalPast, futureMsgs);
-    } else {
-      const base = [...futureMsgs, userMsg, thinking];
-      setFutureMsgs(base);
-
-      const reply = await callLLM("future", [...futureMsgs], text);
-      const assistantMsg: Msg = { role: "assistant", content: reply, ts: Date.now() + 2 };
-
-      const finalFuture = [...futureMsgs, userMsg, assistantMsg];
-      setFutureMsgs(finalFuture);
-      persist(pastMsgs, finalFuture);
-    }
-
-    sendingRef.current = false;
+    pastSendingRef.current = false;
   }
 
-  function next() {
+  async function sendFuture() {
+    const text = futureInput.trim();
+    if (!text || !data) return;
+    if (futureSendingRef.current) return;
+    futureSendingRef.current = true;
+
+    setFutureInput("");
+
+    const userMsg: Msg = { role: "user", content: text, ts: Date.now() };
+    const thinking: Msg = { role: "assistant", content: "…", ts: Date.now() + 1 };
+
+    const base = [...futureMsgs, userMsg, thinking];
+    setFutureMsgs(base);
+
+    const reply = await callLLM(buildSystemPrompt("future"), [...futureMsgs, userMsg], text);
+    const assistantMsg: Msg = { role: "assistant", content: reply, ts: Date.now() + 2 };
+
+    const finalFuture = [...futureMsgs, userMsg, assistantMsg];
+    setFutureMsgs(finalFuture);
+    persist(pastMsgs, finalFuture);
+
+    futureSendingRef.current = false;
+  }
+
+  // ----------------------------
+  // Go reflection
+  // ----------------------------
+  function goReflection() {
     router.push("/reflection");
   }
 
@@ -172,95 +269,251 @@ Rules:
     return (
       <main style={{ maxWidth: 900, margin: "40px auto", padding: 16 }}>
         <h1>Chat</h1>
-        <p>No profile found. Go back to Customize.</p>
+        <p>No profile found. Please complete setup first.</p>
         <button
           onClick={() => router.push("/")}
-          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #cfcfcf", background: "#f0f0f0" }}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid #cfcfcf",
+            background: "#f0f0f0",
+            cursor: "pointer",
+          }}
         >
-          Back
+          Back to Customize
         </button>
       </main>
     );
   }
 
-  return (
-    <main style={{ maxWidth: 1100, margin: "24px auto", padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Chat</h1>
-        <button
-          onClick={next}
-          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #cfcfcf", background: "#f0f0f0", cursor: "pointer" }}
-        >
-          Next → Reflection
-        </button>
-      </div>
+  /**
+   * =========================
+   * STUDENT-EDITABLE ZONE (PAGE HEADER / INSTRUCTIONS)
+   * Students can change page title and guidance text.
+   * =========================
+   */
+  const pageTitle = "Chat with Your Past & Future Selves";
+  const pageHint =
+    "Talk to both selves. Each self may respond differently based on the bios you wrote. Keep it real; you can stay brief.";
 
-      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-        <Tab active={active === "past"} title={`Past: ${data.pastSelf.name}`} onClick={() => setActive("past")} />
-        <Tab active={active === "future"} title={`Future: ${data.futureSelf.name}`} onClick={() => setActive("future")} />
-      </div>
+  return (
+    <main style={{ maxWidth: 1200, margin: "24px auto", padding: 16 }}>
+      <Header
+        title={pageTitle}
+        hint={pageHint}
+        onNext={goReflection}
+        nextLabel="Next → Reflection"
+      />
 
       <div
         style={{
-          marginTop: 12,
-          padding: 12,
-          border: "1px solid #e2e2e2",
-          borderRadius: 10,
-          background: "#fafafa",
-          fontSize: 13,
-          color: "#444",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 18,
+          marginTop: 16,
+          alignItems: "start",
         }}
       >
-        <div style={{ fontWeight: 600 }}>{active === "past" ? data.pastSelf.name : data.futureSelf.name}</div>
-        <div style={{ marginTop: 4 }}>{active === "past" ? data.pastSelf.shortBio : data.futureSelf.shortBio}</div>
-      </div>
-
-      <div style={{ marginTop: 14, height: 420, border: "1px solid #e2e2e2", borderRadius: 10, padding: 12, overflowY: "auto", background: "#fff" }}>
-        {currentMsgs.map((m, i) => {
-          const isUser = m.role === "user";
-          return (
-            <div key={i} style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 10 }}>
-              <div style={{ ...bubbleBase, background: isUser ? "#f0f0f0" : "#fafafa" }}>{m.content}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message…"
-          style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #cfcfcf", fontSize: 14 }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void send();
-            }
-          }}
+        <ChatPanel
+          persona="past"
+          selfName={data.pastSelf.name}
+          selfBio={data.pastSelf.shortBio}
+          selfDesc={data.pastSelf.description}
+          messages={pastMsgs}
+          input={pastInput}
+          setInput={setPastInput}
+          onSend={() => void sendPast()}
+          endRef={pastEndRef}
         />
-        <button onClick={() => void send()} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #cfcfcf", background: "#f0f0f0", cursor: "pointer" }}>
-          Send
-        </button>
+
+        <ChatPanel
+          persona="future"
+          selfName={data.futureSelf.name}
+          selfBio={data.futureSelf.shortBio}
+          selfDesc={data.futureSelf.description}
+          messages={futureMsgs}
+          input={futureInput}
+          setInput={setFutureInput}
+          onSend={() => void sendFuture()}
+          endRef={futureEndRef}
+        />
       </div>
+
+      <p style={{ marginTop: 12, fontSize: 12, color: "#666" }}>
+        Tip: If you want, ask the same question to both selves and compare how they respond.
+      </p>
     </main>
   );
 }
 
-function Tab(props: { active: boolean; title: string; onClick: () => void }) {
+function Header(props: { title: string; hint: string; onNext: () => void; nextLabel: string }) {
   return (
-    <button
-      onClick={props.onClick}
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
+      <div style={{ minWidth: 0 }}>
+        <h1 style={{ margin: 0 }}>{props.title}</h1>
+        <p style={{ marginTop: 8, marginBottom: 0, maxWidth: 860, color: "#444", lineHeight: 1.45 }}>
+          {props.hint}
+        </p>
+      </div>
+
+      <button
+        onClick={props.onNext}
+        style={{
+          padding: "10px 14px",
+          borderRadius: 10,
+          border: "1px solid #cfcfcf",
+          background: "#f0f0f0",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        {props.nextLabel}
+      </button>
+    </div>
+  );
+}
+
+function ChatPanel(props: {
+  persona: "past" | "future";
+  selfName: string;
+  selfBio: string;
+  selfDesc?: string;
+  messages: Msg[];
+  input: string;
+  setInput: (v: string) => void;
+  onSend: () => void;
+  endRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const personaLabel = props.persona === "past" ? "Past self" : "Future self";
+
+  /**
+   * =========================
+   * STUDENT-EDITABLE ZONE (PANEL UI COPY)
+   * Students can adjust the labels and microcopy for each panel.
+   * =========================
+   */
+  const tagline =
+    props.persona === "past"
+      ? "Grounded, honest, and compassionate."
+      : "Calm, hopeful, and perspective-taking.";
+
+  const placeholder =
+    props.persona === "past"
+      ? "Type a message to your past self…"
+      : "Type a message to your future self…";
+
+  return (
+    <section
       style={{
-        padding: "10px 12px",
-        borderRadius: 10,
-        border: "1px solid #cfcfcf",
-        background: props.active ? "#f0f0f0" : "#fafafa",
-        cursor: "pointer",
-        fontSize: 14,
+        border: "1px solid #e2e2e2",
+        borderRadius: 12,
+        background: "#fafafa",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        height: 640,
       }}
     >
-      {props.title}
-    </button>
+      {/* Persona header */}
+      <div style={{ padding: 14, borderBottom: "1px solid #e6e6e6", background: "#f7f7f7" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+          <div style={{ fontWeight: 700 }}>{personaLabel}: {props.selfName}</div>
+          <div style={{ fontSize: 12, color: "#666" }}>{tagline}</div>
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 13, color: "#444", lineHeight: 1.4 }}>
+          <div style={{ fontWeight: 600, fontSize: 12, color: "#666" }}>Short bio</div>
+          <div>{props.selfBio}</div>
+
+          {props.selfDesc?.trim() ? (
+            <>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "#666", marginTop: 8 }}>Description</div>
+              <div>{props.selfDesc}</div>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div
+        style={{
+          padding: 14,
+          background: "#fff",
+          flex: 1,
+          overflowY: "auto",
+        }}
+      >
+        {props.messages.map((m, i) => {
+          const isUser = m.role === "user";
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: isUser ? "flex-end" : "flex-start",
+                marginBottom: 10,
+              }}
+            >
+              <div
+                style={{
+                  ...bubbleBase,
+                  background: isUser ? "#f0f0f0" : "#fafafa",
+                }}
+              >
+                {m.content}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={props.endRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: 12, borderTop: "1px solid #e6e6e6", background: "#f7f7f7" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input
+            value={props.input}
+            onChange={(e) => props.setInput(e.target.value)}
+            placeholder={placeholder}
+            style={{
+              flex: 1,
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #cfcfcf",
+              fontSize: 14,
+              background: "#fff",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                props.onSend();
+              }
+            }}
+          />
+          <button
+            onClick={props.onSend}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid #cfcfcf",
+              background: "#f0f0f0",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            Send
+          </button>
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+          {/* STUDENT-EDITABLE ZONE (PROMPTING TIP) */}
+          Tip: Try one concrete detail (what happened / when / where) to get a more specific response.
+        </div>
+      </div>
+    </section>
   );
 }
