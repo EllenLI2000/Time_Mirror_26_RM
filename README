@@ -1,110 +1,94 @@
-Temporal Selves Chat
+Temporal Selves Chat Prototype
 
 This repository contains a web-based prototype that allows participants to:
 
-1. Define a Past Self and a Future Self
-2. Chat with each self as a separate conversational agent
-3. Reflect on differences between the two conversations
+Define a Past Self and/or a Future Self
+
+Chat with the Past Self and/or the Future Self
+
+Reflect on the conversations
 
 The overall interaction flow is fixed, while content, framing, and wording are customizable.
 
-Do not change the overall interaction flow
-The app always follows this sequence:
-1. Customize: Participants define a Past Self and a Future Self
-2. Chat separately with Past Self and Future Self (Each self responds based on the descriptions written in the first step)
-3. Reflection: Participants answer reflection questions after chatting
-⚠️ Do not change the order or remove any step.
+Interaction Flow
 
-However, you can use your creativity and research mind to change the app based on the needs of your research:
-1. Wording and framing;
-2. What can be customized (you may want to add a cusotmized avatar or other traits that your research needs)
-3. The conversation topics
-4. The appearance of the website
-Throughout the codebase, you will see comments marked: STUDENT-EDITABLE ZONE
+The app follows a three-step interaction sequence:
 
+Customize
+Participants define their Past Self and/or Future Self.
+
+Chat
+Participants interact with the Past Self and/or Future Self as conversational agents.
+
+Reflection
+Participants reflect on the conversations they have just completed.
+
+⚠️ The order of these steps should not be changed.
+
+Customization and Adaptation
+
+This prototype is designed to be adapted for different research contexts.
+You are encouraged to use your creativity and research judgment to modify the app based on your research needs.
+
+You may customize, for example:
+
+Wording and framing
+(e.g., how the selves are described or introduced)
+
+What can be customized by participants
+(e.g., adding avatars, traits, values, or other attributes relevant to your study)
+
+Conversation topics or guidance
+(e.g., what the Past/Future Self focuses on in the dialogue)
+
+The visual appearance of the website
+(e.g., layout, hierarchy, or styling)
+
+Throughout the codebase, you will see comments marked:
+
+STUDENT-EDITABLE ZONE
+
+
+These indicate areas that are safe to modify without breaking the core interaction flow.
 
 Getting Started
-1. Fork the repository
+1. Fork the Repository
+
 Click Fork on GitHub and work from your own copy.
 
-2. Install dependencies
-From the repository root, run at terminal: npm install
+2. Set Up a Project on Data Foundry
 
-3. Set up the API key
-Create a file called .env.local in the repository root with the following content:
-OPENAI_API_KEY=your_api_key_here
-⚠️ Do not commit this file (You can use Codespace in GitHub)
-⚠️The app will not work without a valid API key and available credit
+Create a project on Data Foundry:
+https://data.id.tue.nl/documentation/index
 
-4. Run the app: npm run dev
+Then create a file called .env.local in the repository root with your own Project ID and API key, for example:
 
-5. Then open the portal
+DF_PROJECT_ID=your_project_id_here
+DF_API_KEY=your_api_key_here
 
 
+⚠️ Do not commit this file.
+⚠️ The app will not work without a valid Project ID and API key.
 
-These indicate places where you can safely make changes.
+You may use GitHub Codespaces if you prefer not to run the project locally.
 
-Typical customization points include:
+3. Adjust the Prototype for Your Research
 
-Page titles and explanatory text
+Modify the scripts, prompts, and interface based on your research questions and methods.
 
-Field labels and placeholder wording
+Typical adjustments include:
 
-How the Past Self and Future Self are framed
+Reframing the Past and Future selves
 
-The tone and guidance rules used in the chat (safeguards)
+Changing what participants are asked to reflect on
 
-Reflection questions shown after the chat
+Adding or removing customization fields
 
-Which fields are required vs. optional
+Adjusting conversational guidance or safeguards
 
-You are encouraged to adapt wording, framing, and prompts.
+4. Make the Website Available to Participants
 
-What You Should NOT Change
+If you want to share the web app with participants, you can deploy it using Data Foundry.
 
-To keep the system functional, do not:
-
-Remove either the Past Self or the Future Self
-
-Merge the two chats into one conversation
-
-Change the page order (Customize → Chat → Reflection)
-
-Remove the safeguard layer in the chat prompts
-
-Modify the API route unless you know what you are doing
-
-If something breaks, first revert changes outside the editable zones.
-
-Notes on Chat Behavior
-
-The Past Self and Future Self are implemented as two distinct conversational agents. Each agent is shaped by:
-1. the participant-written short bio
-2. the longer description
-a built-in safeguard layer that encourages supportive, constructive responses
-Responses are not intended as professional, medical, or therapeutic advice
-
-Deployment (Optional)
-If you want to share this app with participants: You can deploy it using Vercel or a similar service
-Store the API key as an environment variable on the server
-Be aware that each chat message uses the OpenAI API and may incur cost
-
-
-Data & Privacy
-By default:
-Data is stored locally in the participant’s browser
-No login or authentication is required
-No personally identifiable information is enforced
-If you plan to collect or export data, you are responsible for handling consent and storage appropriately.
-
-Troubleshooting
-App does not start → Check Node version (Node ≥ 18 required)
-Chat replies fail → Check API key validity and account credit
-Layout breaks after editing → Revert changes outside editable zones
-
-Summary
-This repository provides:
-A ready-to-run prototype
-Clear customization points
-A stable interaction structure
-Use it as a base and adapt the content and framing, not the core flow.
+Please refer to the official documentation:
+https://data.id.tue.nl/documentation/index
