@@ -41,10 +41,11 @@ DF_PROJECT_ID=your_project_id_here
 DF_API_KEY=your_api_key_here
 ⚠️ Do not commit this file.
 ⚠️ The app will not work without a valid Project ID and API key.
-You may use GitHub Codespaces if you prefer not to run the project locally.
 
-3. Adjust the Prototype for Your Research
+3. You may use GitHub Codespaces to try out the prototype. To do so: create a codespace --> input "npm install" the terminal, and then input "npm run dev" (here you may receive some warning message)
+
+4. Adjust the Prototype for Your Research
 Modify the scripts, prompts, and interface based on your research questions and methods.
 
-4. Make the Website Available to Participants
+5. Make the Website Available to Participants
 If you want to share the web app with participants, you can deploy it using Data Foundry. Please refer to the documentation: https://data.id.tue.nl/documentation/index
